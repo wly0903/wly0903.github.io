@@ -28,4 +28,70 @@ function renderPublications(){
  target.innerHTML=rows.length?rows.map(paperCard).join(''):'<div class="pub-empty"><span data-icon="search"></span><strong>No publications found</strong><p>Try another combination or reset the filters.</p></div>';
  renderIcons();
 }
-async function initGuestbook(){const form=document.getElementById('guestbookForm');if(!form)return;const nameEl=document.getElementById('guestName'),msgEl=document.getElementById('guestMessage'),status=document.getElementById('guestMessages'),button=form.querySelector('button[type="submit"]');const FORM_ENDPOINT='https://formspree.io/f/REPLACE_WITH_YOUR_FORM_ID';form.addEventListener('submit',async e=>{e.preventDefault();const message=msgEl.value.trim();if(!message){msgEl.focus();return}const name=nameEl.value.trim()||'Website visitor';if(FORM_ENDPOINT.includes('REPLACE_WITH_YOUR_FORM_ID')){status.innerHTML='<p class="guest-sent-note">The message form needs a connected submission endpoint before messages can be stored in a dashboard. Please configure the form endpoint in the site settings.</p>';return}button.disabled=true;button.style.opacity='.7';try{const response=await fetch(FORM_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({name,message,email:'wly0903@sjtu.edu.cn',_subject:'Academic homepage guestbook message'})});if(!response.ok)throw new Error('submission failed');status.innerHTML='<p class="guest-sent-note">Thank you — your message has been submitted.</p>';form.reset()}catch(err){status.innerHTML='<p class="guest-sent-note error">The message could not be submitted. Please try again later.</p>'}finally{button.disabled=false;button.style.opacity='1'}})}document.addEventListener('DOMContentLoaded',()=>{load().then(()=>initPublicationFilters()).catch(e=>console.error(e));initGuestbook()});
+function initGuestbook() {
+  const form = document.getElementById('guestbookForm');
+  if (!form) return;
+  const nameEl = document.getElementById('guestName');
+  const msgEl = document.getElementById('guestMessage');
+  const status = document.getElementById('guestMessages');
+  const button = form.querySelector('button[type="submit"]');
+  const endpoint = form.getAttribute('action') || '';
+  let submitting = false;
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+
+  function showStatus(message, error = false) {
+    const note = document.createElement('p');
+    note.className = 'guest-sent-note' + (error ? ' error' : '');
+    note.textContent = message;
+    status.replaceChildren(note);
+  }
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (submitting) return;
+    const message = msgEl.value.trim();
+    if (!message) {
+      showStatus('Please enter a message.', true);
+      msgEl.focus();
+      return;
+    }
+    if (!/^https:\/\/formspree\.io\/f\/[a-zA-Z0-9]+$/.test(endpoint)) {
+      showStatus('Messaging is temporarily unavailable. Please email wly0903@sjtu.edu.cn. Your message has not been sent.', true);
+      return;
+    }
+    submitting = true;
+    button.disabled = true;
+    form.setAttribute('aria-busy', 'true');
+    showStatus('Sending your message…');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          name: nameEl.value.trim() || 'Website visitor',
+          message,
+          _subject: 'Academic homepage guestbook message'
+        }),
+        signal: controller.signal
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.ok === false || result?.errors?.length) {
+        throw new Error('Submission rejected');
+      }
+      showStatus('Thank you — your message has been submitted.');
+      form.reset();
+    } catch (error) {
+      showStatus('We could not confirm your submission. Your message is still here. Please try again or email wly0903@sjtu.edu.cn.', true);
+    } finally {
+      clearTimeout(timeout);
+      submitting = false;
+      button.disabled = false;
+      form.removeAttribute('aria-busy');
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded',()=>{load().then(()=>initPublicationFilters()).catch(e=>console.error(e));initGuestbook()});
